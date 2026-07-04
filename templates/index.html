@@ -1,0 +1,62 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Concierge — IT Service Desk</title>
+  <link rel="stylesheet" href="/static/style.css">
+</head>
+<body>
+  <header class="topbar">
+    <div class="brand">
+      <span class="logo">◆</span>
+      <div>
+        <h1>Concierge</h1>
+        <p class="tagline">IT Service Desk · VIP priority routing</p>
+      </div>
+    </div>
+  </header>
+
+  <main>
+    <section class="metrics" id="metrics"></section>
+
+    <div class="grid">
+      <section class="panel">
+        <h2>New Ticket</h2>
+        <form id="ticket-form" class="ticket-form">
+          <label>Subject
+            <input type="text" name="subject" placeholder="Laptop will not connect to VPN" required>
+          </label>
+          <label>Requester
+            <input type="text" name="requester" placeholder="Jane Doe" required>
+          </label>
+          <div class="row">
+            <label>Type
+              <select name="ticket_type" id="type-select"></select>
+            </label>
+            <label>Priority
+              <select name="priority" id="priority-select"></select>
+            </label>
+          </div>
+          <label class="vip-toggle">
+            <input type="checkbox" name="is_vip">
+            <span>VIP — executive or senior stakeholder</span>
+          </label>
+          <button type="submit">Create ticket</button>
+        </form>
+        <p class="hint">VIP tickets jump to the top of the queue and run on a tighter SLA clock.</p>
+      </section>
+
+      <section class="panel wide">
+        <h2>Active Queue <span class="count" id="queue-count">0</span></h2>
+        <div id="queue" class="ticket-list"></div>
+
+        <h2 class="resolved-head">Resolved</h2>
+        <div id="resolved" class="ticket-list resolved-list"></div>
+      </section>
+    </div>
+  </main>
+
+  <script src="/static/app.js"></script>
+</body>
+</html>
