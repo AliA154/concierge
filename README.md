@@ -7,6 +7,8 @@ pushes them to the top, and runs them on a tighter SLA clock.
 
 Built to understand the prioritization logic behind tools like ServiceNow.
 
+![Concierge dashboard](screenshot.png)
+
 ## What it does
 
 - **ITIL ticket types** — every ticket is an Incident, Request, Problem, or Change,
