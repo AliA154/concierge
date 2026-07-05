@@ -7,8 +7,9 @@ executive requests to the top of the queue. Built to understand how tools
 like ServiceNow handle high-priority incidents.
 """
 
+import os
 import sqlite3
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 from pathlib import Path
 
 from flask import Flask, g, jsonify, render_template, request
@@ -229,6 +230,55 @@ def meta():
     })
 
 
-if __name__ == "__main__":
+# Sample tickets used to populate a fresh database so the demo looks alive.
+# (subject, requester, type, priority, vip, minutes_ago, resolved_after_min)
+SAMPLE = [
+    ("CEO cannot join board Zoom call", "M. Reyes (CEO)", "Incident", "Critical", 1, 12, None),
+    ("VPN drops every few minutes", "T. Okafor (CFO)", "Incident", "High", 1, 40, None),
+    ("New hire laptop setup for Monday", "HR Onboarding", "Request", "Medium", 0, 90, None),
+    ("Conference room 14B display no signal", "Facilities", "Incident", "High", 0, 55, None),
+    ("Printer on 12th floor jamming", "K. Silva", "Incident", "Low", 0, 200, None),
+    ("Repeated Outlook crashes across sales team", "IT Monitoring", "Problem", "High", 0, 150, None),
+    ("Approve O365 license bump for design team", "Change Board", "Change", "Medium", 0, 300, None),
+    ("Password reset", "J. Park", "Request", "Low", 0, 30, 8),
+    ("Executive iPhone will not sync mail", "L. Chen (COO)", "Incident", "High", 1, 240, 22),
+    ("Meeting room mic not working", "R. Adler", "Incident", "Medium", 0, 500, 65),
+]
+
+
+def seed_db(force=False):
+    """Load sample tickets. By default only seeds when the table is empty,
+    so a live deploy comes up populated without wiping real activity on restart."""
     init_db()
-    app.run(debug=True, port=5001)
+    db = sqlite3.connect(DB_PATH)
+    if not force:
+        count = db.execute("SELECT COUNT(*) FROM tickets").fetchone()[0]
+        if count > 0:
+            db.close()
+            return
+    db.execute("DELETE FROM tickets")
+    base = datetime.now(timezone.utc)
+    for subj, req, ttype, pri, vip, ago, resolved_after in SAMPLE:
+        created = base - timedelta(minutes=ago)
+        state = "Resolved" if resolved_after is not None else "New"
+        resolved_at = (
+            (created + timedelta(minutes=resolved_after)).isoformat()
+            if resolved_after is not None
+            else None
+        )
+        db.execute(
+            """INSERT INTO tickets (subject, requester, ticket_type, priority, state, is_vip, created_at, resolved_at)
+               VALUES (?, ?, ?, ?, ?, ?, ?, ?)""",
+            (subj, req, ttype, pri, state, vip, created.isoformat(), resolved_at),
+        )
+    db.commit()
+    db.close()
+
+
+# Initialize (and seed if empty) at import time so it works under gunicorn too.
+seed_db()
+
+
+if __name__ == "__main__":
+    port = int(os.environ.get("PORT", 5001))
+    app.run(debug=True, host="0.0.0.0", port=port)
