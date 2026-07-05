@@ -1,5 +1,8 @@
 # Concierge — IT Service Desk Console
 
+**Live demo: https://concierge-y6ju.onrender.com**
+*(hosted on a free tier, so the first load after it has been idle may take up to a minute to wake up)*
+
 A lightweight IT support desk built to model how a real service desk prioritizes
 work. The core idea is simple: high-priority incidents from executives and senior
 stakeholders should never sit and wait in a queue. Concierge flags those tickets,
