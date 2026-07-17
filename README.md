@@ -1,70 +1,110 @@
 # Concierge — IT Service Desk Console
 
+[![CI](https://github.com/AliA154/concierge/actions/workflows/ci.yml/badge.svg)](https://github.com/AliA154/concierge/actions/workflows/ci.yml)
+
 **Live demo: https://concierge-y6ju.onrender.com**
-*(hosted on a free tier, so the first load after it has been idle may take up to a minute to wake up)*
+*(free tier — the first load after idle can take up to a minute to wake up)*
 
-A lightweight IT support desk built to model how a real service desk prioritizes
-work. The core idea is simple: high-priority incidents from executives and senior
-stakeholders should never sit and wait in a queue. Concierge flags those tickets,
-pushes them to the top, and runs them on a tighter SLA clock.
-
-Built to understand the prioritization logic behind tools like ServiceNow.
+A single-screen service desk console built around one idea: VIP incidents never
+sit in a queue. Tickets flagged VIP jump to the front and run on half the normal
+SLA clock, with per-second countdowns, hold-aware SLA accounting, and a full
+audit trail on every ticket.
 
 ![Concierge dashboard](screenshot.png)
 
 ## What it does
 
-- **ITIL ticket types** — every ticket is an Incident, Request, Problem, or Change,
-  and moves through New → In Progress → On Hold → Resolved.
-- **VIP priority routing** — tickets flagged VIP (executives, senior stakeholders,
-  their assistants) jump to the front of the queue and get half the normal SLA time.
-- **Live SLA timers** — each ticket shows time remaining against its target, and
-  turns red when it breaches. Targets scale by priority (Critical 30m ... Low 480m).
-- **Metrics row** — open count, VIP open, tickets currently breaching SLA, average
-  resolve time (MTTR), and overall SLA-met percentage.
+- **Derived priority** — priority is computed from Impact × Urgency (the ITIL
+  matrix), never picked directly. High impact + high urgency = Critical.
+- **VIP routing + tighter clocks** — VIP tickets sort first and get half the
+  SLA target. VIP is a clock modifier, not a priority bump.
+- **Hold-aware SLA clocks** — the clock pauses while a ticket is On Hold, and
+  accrued hold time is subtracted from elapsed everywhere.
+- **Audit trail** — every create, state change, assignment, reopen, and work
+  note is an event with an actor and timestamp, rendered as a timeline.
+- **Resolved vs Closed + reopens** — resolution and closure are distinct steps,
+  and reopened tickets carry a visible reopen count.
+- **Agents** — tickets have owners; taking an unassigned ticket auto-assigns it
+  to the acting agent.
 
-## Queue logic
+## Design decisions
 
-Open tickets are sorted by, in order:
+- **SLA is computed at read time, never stored.** There are no background jobs
+  and no stored status to drift; every response derives status from timestamps.
+- **The clock stops On Hold.** Entering hold stamps `on_hold_since`; leaving it
+  adds the stretch to `held_minutes`. Effective elapsed = wall clock − completed
+  holds − the in-progress hold. Waiting on a requester should not burn the SLA.
+- **Priority is derived, not picked.** Client-sent priority is ignored; changing
+  priority means changing impact or urgency.
+- **SLA outcome freezes at first resolution.** Reopening cannot retroactively
+  un-breach an SLA (or breach a met one). The live clock resumes, but the
+  ticket's metrics contribution stays the first verdict.
+- **Attainment is measured over completed work.** `sla_met_pct` counts frozen
+  outcomes only; live pain shows separately in the Breaching tile, so an open
+  breach never muddies the historical rate.
+- **Held VIP tickets stay on top.** On Hold tickets keep their queue position
+  with a paused chip rather than sinking — out of sight is how held VIP tickets
+  get forgotten.
+- **SQLite on an ephemeral disk.** Render's free tier wipes the DB on deploy,
+  so `init_db()` just creates the final schema and the seed repaints the demo —
+  a migration runner would have nothing to migrate. Production would swap in
+  Postgres and a real migration tool; nothing else changes.
+- **Polling over WebSockets.** A 15s poll plus client-side 1s ticking is ample
+  at this scale and removes a whole class of connection-state bugs.
+- **No pagination.** The demo dataset is bounded by design; this is a stated
+  non-decision, not an oversight.
 
-1. VIP status (VIP first)
-2. Priority severity (Critical → High → Medium → Low)
-3. Age (oldest first)
+## API
 
-So a VIP Critical incident always sits above a routine request, which is exactly
-how a desk supporting executives has to run.
+| Endpoint | Method | Body | Returns | Errors |
+|---|---|---|---|---|
+| `/api/meta` | GET | — | enums, priority matrix, SLA targets, transitions, agents | — |
+| `/api/tickets` | GET | — | `{now, queue, resolved, metrics}` | — |
+| `/api/tickets` | POST | `{subject, requester, ticket_type?, impact?, urgency?, is_vip?}` | 201 + Ticket, `Location` header | 400 validation |
+| `/api/tickets/<id>` | GET | — | `{now, ticket, events}` | 404 |
+| `/api/tickets/<id>` | PATCH | `{state?, assigned_to?}` | Ticket | 400 illegal transition / unknown agent, 404 |
+| `/api/tickets/<id>/notes` | POST | `{note}` | 201 + Event | 400 (empty, >1000 chars, Closed), 404 |
+| `/api/tickets/<id>/reopen` | POST | — | Ticket | 400 unless Resolved, 404 |
+| `/api/demo/reset` | POST | — | `{ok, message}` | 429 within 10s of last reset |
 
-## Stack
+Every error uses the same JSON envelope: `{"error": {"code": 400, "message": "..."}}`.
+Mutating requests may carry an `X-Agent` header naming the acting agent (cosmetic,
+unauthenticated by design).
 
-- **Backend:** Python + Flask, SQLite for storage
-- **Frontend:** vanilla HTML/CSS/JS single-page dashboard
-- No external services, runs entirely on your machine.
+## Architecture
+
+```mermaid
+flowchart LR
+    B[Browser<br/>15s poll + 1s tick] -->|GET /api/tickets| R[concierge/routes.py]
+    R --> D[(SQLite)]
+    D --> S[sla.serialize<br/>hold-adjusted elapsed, status]
+    S --> Q[queue sort:<br/>VIP → priority → age]
+    Q -->|JSON| B
+```
+
+```
+app.py                  thin shim: gunicorn app:app
+concierge/__init__.py   app factory (create_app)
+concierge/sla.py        pure domain logic: matrix, SLA math, serialize, metrics
+concierge/db.py         SQLite connection + schema
+concierge/routes.py     all endpoints (one blueprint)
+concierge/seed.py       curated deterministic demo data
+tests/                  pytest suite over the SLA math, queue, API, and seed
+templates/, static/     vanilla HTML/CSS/JS frontend (no build step, no deps)
+render.yaml             Render deploy config
+```
 
 ## Run it
 
 ```bash
-python3 -m venv .venv
-source .venv/bin/activate
+python3 -m venv .venv && source .venv/bin/activate
 pip install -r requirements.txt
-
-python seed.py      # optional: loads sample tickets
-python app.py       # serves at http://127.0.0.1:5001
+python app.py        # http://127.0.0.1:5001 — seeds demo data automatically
 ```
 
-Open http://127.0.0.1:5001 in a browser.
+Run the tests:
 
-## Project layout
-
+```bash
+pip install -r requirements-dev.txt
+pytest
 ```
-app.py              Flask API + SLA / priority logic
-seed.py             sample data for the demo
-templates/index.html  dashboard markup
-static/style.css      dashboard styling
-static/app.js         front-end logic and polling
-```
-
-## Possible next steps
-
-- Active Directory style user admin (onboarding / offboarding)
-- Scheduled morning health checks for conference-room AV and printers
-- Knowledge-base assistant for common issues

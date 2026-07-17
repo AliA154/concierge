@@ -1,0 +1,12 @@
+[tool.ruff]
+line-length = 100
+target-version = "py311"
+
+[tool.ruff.lint]
+select = ["E", "F", "I", "UP", "B"]
+# UP017 (datetime.UTC) needs Python 3.11+ at runtime; timezone.utc keeps the
+# code runnable on older local interpreters while CI targets 3.11/3.12.
+ignore = ["UP017"]
+
+[tool.ruff.lint.isort]
+known-first-party = ["concierge", "conftest"]
