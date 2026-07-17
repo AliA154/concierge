@@ -1,62 +1,182 @@
 <!DOCTYPE html>
 <html lang="en">
 <head>
-  <meta charset="UTF-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>Concierge — IT Service Desk</title>
-  <link rel="stylesheet" href="/static/style.css">
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="color-scheme" content="dark">
+  <title>Concierge</title>
+  <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16'%3E%3Cpath d='M8 1l7 7-7 7-7-7z' fill='%234c8bf5'/%3E%3C/svg%3E">
+  <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
 </head>
 <body>
+
   <header class="topbar">
     <div class="brand">
-      <span class="logo">◆</span>
-      <div>
-        <h1>Concierge</h1>
-        <p class="tagline">IT Service Desk · VIP priority routing</p>
-      </div>
+      <span class="brand-glyph" aria-hidden="true">&#9670;</span>
+      <span class="brand-name">Concierge</span>
+      <span class="tagline">VIP-aware service desk</span>
+    </div>
+    <div class="topbar-right">
+      <span id="reconnectPill" class="reconnect-pill" hidden>Reconnecting&#8230;</span>
+      <span class="topbar-hint">Press <kbd>?</kbd> for shortcuts</span>
+      <span class="desk-time">Desk time <span id="deskClock" class="num">--:--:--</span> UTC</span>
+      <label class="agent-picker" title="Cosmetic identity &mdash; sent as X-Agent on every action">
+        <span class="agent-picker-label">Acting as</span>
+        <span id="agentChip" class="avatar" aria-hidden="true"></span>
+        <select id="agentSelect" aria-label="Acting as agent"></select>
+      </label>
     </div>
   </header>
 
-  <main>
-    <section class="metrics" id="metrics"></section>
+  <main class="wrap">
 
-    <div class="grid">
-      <section class="panel">
-        <h2>New Ticket</h2>
-        <form id="ticket-form" class="ticket-form">
-          <label>Subject
-            <input type="text" name="subject" placeholder="Laptop will not connect to VPN" required>
+    <button id="vipBanner" class="vip-banner" hidden></button>
+
+    <section id="metrics" class="metrics" aria-label="Desk metrics">
+      <!-- Static skeleton: replaced by the first render. Shimmer only kicks in
+           if the first fetch takes >300ms (see boot() in app.js). -->
+      <div class="tile skeleton"><div class="sk sk-label"></div><div class="sk sk-value"></div><div class="sk sk-context"></div></div>
+      <div class="tile skeleton"><div class="sk sk-label"></div><div class="sk sk-value"></div><div class="sk sk-context"></div></div>
+      <div class="tile skeleton"><div class="sk sk-label"></div><div class="sk sk-value"></div><div class="sk sk-context"></div></div>
+      <div class="tile skeleton"><div class="sk sk-label"></div><div class="sk sk-value"></div><div class="sk sk-context"></div></div>
+      <div class="tile skeleton"><div class="sk sk-label"></div><div class="sk sk-value"></div><div class="sk sk-context"></div></div>
+      <div class="tile skeleton"><div class="sk sk-label"></div><div class="sk sk-value"></div><div class="sk sk-context"></div></div>
+    </section>
+
+    <div class="columns">
+
+      <aside class="panel form-panel">
+        <h2 class="panel-title">New ticket</h2>
+        <form id="ticketForm" autocomplete="off" novalidate>
+          <label class="field">
+            <span>Subject</span>
+            <input id="fSubject" maxlength="200" placeholder="Short description" required>
           </label>
-          <label>Requester
-            <input type="text" name="requester" placeholder="Jane Doe" required>
+          <label class="field">
+            <span>Requester</span>
+            <input id="fRequester" maxlength="200" placeholder="Who is affected" required>
           </label>
-          <div class="row">
-            <label>Type
-              <select name="ticket_type" id="type-select"></select>
+          <label class="field">
+            <span>Type</span>
+            <select id="fType" disabled></select>
+          </label>
+          <div class="field-row">
+            <label class="field">
+              <span>Impact</span>
+              <select id="fImpact" disabled></select>
             </label>
-            <label>Priority
-              <select name="priority" id="priority-select"></select>
+            <label class="field">
+              <span>Urgency</span>
+              <select id="fUrgency" disabled></select>
             </label>
           </div>
+          <div class="priority-preview">
+            <span class="pp-label">Priority</span>
+            <span id="ppBadge" class="pp-badge">&mdash;</span>
+            <span id="ppTarget" class="pp-target num"></span>
+          </div>
           <label class="vip-toggle">
-            <input type="checkbox" name="is_vip">
-            <span>VIP — executive or senior stakeholder</span>
+            <input type="checkbox" id="fVip">
+            <span class="vip-box" aria-hidden="true">&#9733;</span>
+            <span>VIP requester</span>
+            <span class="vip-note">SLA halved</span>
           </label>
-          <button type="submit">Create ticket</button>
+          <button type="submit" id="createBtn" class="btn-primary">Create ticket</button>
+          <div id="formError" class="form-error" role="alert" hidden></div>
         </form>
-        <p class="hint">VIP tickets jump to the top of the queue and run on a tighter SLA clock.</p>
+      </aside>
+
+      <section class="panel queue-panel" id="queuePanel">
+        <div class="queue-toolbar">
+          <div id="filters" class="segmented" role="group" aria-label="Queue filters">
+            <button type="button" data-filter="all" class="active">All <span class="count num" data-count="all"></span></button>
+            <button type="button" data-filter="vip"><span class="star">&#9733;</span> VIP <span class="count num" data-count="vip"></span></button>
+            <button type="button" data-filter="at_risk">At risk <span class="count num" data-count="at_risk"></span></button>
+            <button type="button" data-filter="unassigned">Unassigned <span class="count num" data-count="unassigned"></span></button>
+          </div>
+          <input id="search" type="search" placeholder="Search subject, requester, number&#8230;" aria-label="Search tickets">
+        </div>
+
+        <div id="queue" class="queue">
+          <!-- Static skeleton rows (see note on the metrics skeleton above). -->
+          <div class="skel-row skeleton"><div class="sk sk-num"></div><div class="sk sk-dot"></div><div class="sk sk-subj"></div><div class="sk sk-sla"></div></div>
+          <div class="skel-row skeleton"><div class="sk sk-num"></div><div class="sk sk-dot"></div><div class="sk sk-subj short"></div><div class="sk sk-sla"></div></div>
+          <div class="skel-row skeleton"><div class="sk sk-num"></div><div class="sk sk-dot"></div><div class="sk sk-subj"></div><div class="sk sk-sla"></div></div>
+          <div class="skel-row skeleton"><div class="sk sk-num"></div><div class="sk sk-dot"></div><div class="sk sk-subj short"></div><div class="sk sk-sla"></div></div>
+          <div class="skel-row skeleton"><div class="sk sk-num"></div><div class="sk sk-dot"></div><div class="sk sk-subj"></div><div class="sk sk-sla"></div></div>
+        </div>
+
+        <div id="queueEmpty" class="empty-state" hidden>
+          <svg viewBox="0 0 48 48" width="48" height="48" aria-hidden="true">
+            <circle cx="24" cy="24" r="22" fill="none" stroke="var(--ok)" stroke-width="2"/>
+            <path d="M15 24.5l6 6 12-13" fill="none" stroke="var(--ok)" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"/>
+          </svg>
+          <p class="empty-title">Queue clear</p>
+          <p class="empty-sub">New tickets appear here, sorted VIP first.</p>
+        </div>
+        <div id="queueNoMatch" class="empty-state slim" hidden>
+          <p class="empty-sub">No open tickets match this view.</p>
+        </div>
+
+        <div id="resolvedSection" hidden>
+          <h2 class="section-label">Resolved <span class="count num" id="resolvedCount"></span></h2>
+          <div id="resolvedList" class="queue resolved-list"></div>
+        </div>
       </section>
 
-      <section class="panel wide">
-        <h2>Active Queue <span class="count" id="queue-count">0</span></h2>
-        <div id="queue" class="ticket-list"></div>
-
-        <h2 class="resolved-head">Resolved</h2>
-        <div id="resolved" class="ticket-list resolved-list"></div>
-      </section>
     </div>
+
+    <footer class="footer">
+      Press <kbd>?</kbd> for shortcuts &middot;
+      <button type="button" id="resetDemo" class="linklike">Reset demo data</button>
+    </footer>
+
   </main>
 
-  <script src="/static/app.js"></script>
+  <div id="drawerBackdrop" class="drawer-backdrop" hidden></div>
+
+  <aside id="drawer" class="drawer" role="dialog" aria-modal="true" aria-label="Ticket detail" aria-hidden="true">
+    <header class="drawer-head">
+      <div class="drawer-title">
+        <span id="drawerNumber" class="drawer-number num"></span>
+        <h2 id="drawerSubject"></h2>
+      </div>
+      <button type="button" id="drawerClose" class="icon-btn" aria-label="Close drawer">&#10005;</button>
+    </header>
+    <div class="drawer-body">
+      <div id="drawerIdentity"></div>
+      <div id="drawerSla"></div>
+      <div id="drawerControls"></div>
+      <div id="drawerTimeline"></div>
+      <form id="noteForm" class="composer">
+        <textarea id="noteInput" maxlength="1000" rows="3" placeholder="Add a work note&#8230;" aria-label="Work note"></textarea>
+        <button type="submit" id="noteSubmit" class="btn-primary btn-small">Add note</button>
+      </form>
+    </div>
+  </aside>
+
+  <div id="toasts" class="toasts" aria-live="polite"></div>
+
+  <div id="shortcutsOverlay" class="overlay" hidden>
+    <div class="overlay-card" role="dialog" aria-modal="true" aria-label="Keyboard shortcuts">
+      <div class="overlay-head">
+        <h2>Keyboard shortcuts</h2>
+        <button type="button" id="overlayClose" class="icon-btn" aria-label="Close shortcuts">&#10005;</button>
+      </div>
+      <dl class="shortcut-list">
+        <div class="shortcut"><dt><kbd>n</kbd></dt><dd>New ticket (focus subject)</dd></div>
+        <div class="shortcut"><dt><kbd>/</kbd></dt><dd>Search the queue</dd></div>
+        <div class="shortcut"><dt><kbd>j</kbd> <kbd>k</kbd></dt><dd>Move selection down / up</dd></div>
+        <div class="shortcut"><dt><kbd>Enter</kbd></dt><dd>Open selected ticket</dd></div>
+        <div class="shortcut"><dt><kbd>1</kbd></dt><dd>Selected &rarr; In Progress</dd></div>
+        <div class="shortcut"><dt><kbd>2</kbd></dt><dd>Selected &rarr; On Hold</dd></div>
+        <div class="shortcut"><dt><kbd>3</kbd></dt><dd>Selected &rarr; Resolved</dd></div>
+        <div class="shortcut"><dt><kbd>Esc</kbd></dt><dd>Close drawer / clear selection</dd></div>
+        <div class="shortcut"><dt><kbd>?</kbd></dt><dd>Toggle this overlay</dd></div>
+      </dl>
+    </div>
+  </div>
+
+  <script src="{{ url_for('static', filename='app.js') }}"></script>
 </body>
 </html>
