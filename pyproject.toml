@@ -1,3 +1,8 @@
+[tool.pytest.ini_options]
+# The bare `pytest` binary does not put the repo root on sys.path (unlike
+# `python -m pytest`), so the concierge package needs this to import in CI.
+pythonpath = ["."]
+
 [tool.ruff]
 line-length = 100
 target-version = "py311"
