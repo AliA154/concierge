@@ -73,6 +73,70 @@ test("changeState reverts and toasts on a server error", async () => {
   expect(toast).toHaveBeenCalledWith("cannot move New → Closed", { type: "error" });
 });
 
+test("assignTicket applies optimistically then reconciles with the server ticket", async () => {
+  let current: Ticket[] = queueFixture;
+  let mutated = false;
+  server.use(
+    http.patch("/api/tickets/1", async ({ request }) => {
+      const body = (await request.json()) as { assigned_to: string | null };
+      const updated = { ...queueFixture[1]!, assigned_to: body.assigned_to } as Ticket;
+      current = current.map((t) => (t.id === 1 ? updated : t));
+      mutated = true;
+      return HttpResponse.json(updated);
+    }),
+    // metrics.open only flips to 99 once the follow-up GET has actually been
+    // parsed into state, so waiting on it (not just the PATCH) proves the
+    // background refresh() settled before the test ends.
+    http.get("/api/tickets", () =>
+      HttpResponse.json({ now: NOW_ISO, queue: current, resolved: resolvedFixture, metrics: { ...metrics, open: mutated ? 99 : metrics.open } }),
+    ),
+  );
+  const { result } = renderHook(() => useTickets(opts));
+  await waitFor(() => expect(result.current.store.loaded).toBe(true));
+  await act(() => result.current.assignTicket(1, "Marcus Bell"));
+  expect(result.current.store.tickets.get(1)?.assigned_to).toBe("Marcus Bell");
+  await waitFor(() => expect(result.current.store.metrics?.open).toBe(99));
+});
+
+test("resolving a ticket toasts an Undo action that reopens it", async () => {
+  const toast = vi.fn().mockReturnValue({ dismiss: vi.fn() });
+  let current: Ticket[] = queueFixture;
+  // metrics.open advances a stage at a time so waiting on it (rather than on
+  // the PATCH/POST alone) proves each background refresh() settled into
+  // state before the test moves on — otherwise the trailing setState from a
+  // still-in-flight refresh fires after unmount.
+  let stage: 0 | 1 | 2 = 0;
+  server.use(
+    http.patch("/api/tickets/1", () => {
+      current = current.map((t) => (t.id === 1 ? ({ ...t, state: "Resolved" } as Ticket) : t));
+      stage = 1;
+      return HttpResponse.json(current.find((t) => t.id === 1));
+    }),
+    http.post("/api/tickets/1/reopen", () => {
+      current = current.map((t) => (t.id === 1 ? ({ ...t, state: "In Progress" } as Ticket) : t));
+      stage = 2;
+      return HttpResponse.json(current.find((t) => t.id === 1));
+    }),
+    http.get("/api/tickets", () =>
+      HttpResponse.json({ now: NOW_ISO, queue: current, resolved: resolvedFixture, metrics: { ...metrics, open: 90 + stage } }),
+    ),
+  );
+  const { result } = renderHook(() => useTickets({ ...opts, toast }));
+  await waitFor(() => expect(result.current.store.loaded).toBe(true));
+  await act(() => result.current.changeState(1, "Resolved"));
+  expect(result.current.store.tickets.get(1)?.state).toBe("Resolved");
+  expect(toast).toHaveBeenCalledWith(
+    "INC-1001 resolved",
+    expect.objectContaining({ type: "ok", action: "Undo", onAction: expect.any(Function) }),
+  );
+  await waitFor(() => expect(result.current.store.metrics?.open).toBe(91));
+  const undoCall = toast.mock.calls.find(([, opts]) => opts?.action === "Undo");
+  await act(async () => { await undoCall![1].onAction(); });
+  expect(result.current.store.tickets.get(1)?.state).toBe("In Progress");
+  expect(toast).toHaveBeenCalledWith("INC-1001 reopened", { type: "ok" });
+  await waitFor(() => expect(result.current.store.metrics?.open).toBe(92));
+});
+
 test("illegal transitions send nothing", async () => {
   let called = false;
   server.use(http.patch("/api/tickets/2", () => { called = true; return HttpResponse.json({}); }));
@@ -111,3 +175,4 @@ test("createTicket inserts in sort position and resetDemo returns the message", 
   await waitFor(() => expect(result.current.store.metrics?.open).toBe(99));
   await expect(act(() => result.current.resetDemo())).resolves.toBe("Demo data reset");
 });
+
