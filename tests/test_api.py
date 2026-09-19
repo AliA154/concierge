@@ -275,6 +275,22 @@ def test_demo_reset_reseeds_and_rate_limits(client):
     assert second.get_json()["error"]["code"] == 429
 
 
-def test_index_renders(client):
-    # Gunicorn smoke: `gunicorn app:app` serves this same view.
-    assert client.get("/").status_code == 200
+def test_index_serves_built_frontend(client, tmp_path, monkeypatch):
+    dist = tmp_path / "dist"
+    (dist / "assets").mkdir(parents=True)
+    (dist / "index.html").write_text("<!doctype html><title>Concierge</title><div id=root></div>")
+    (dist / "assets" / "app.js").write_text("console.log('hi')")
+    monkeypatch.setitem(client.application.config, "FRONTEND_DIST", str(dist))
+    res = client.get("/")
+    assert res.status_code == 200
+    assert b'id=root' in res.data
+    asset = client.get("/assets/app.js")
+    assert asset.status_code == 200
+    assert asset.headers["Cache-Control"].startswith("public, max-age=")
+
+
+def test_index_503_without_build(client, tmp_path, monkeypatch):
+    monkeypatch.setitem(client.application.config, "FRONTEND_DIST", str(tmp_path / "missing"))
+    res = client.get("/")
+    assert res.status_code == 503
+    assert b"npm run build" in res.data

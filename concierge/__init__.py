@@ -35,6 +35,7 @@ def create_app(db_path: str | None = None, testing: bool = False) -> Flask:
     app.config["DATABASE"] = str(
         db_path or os.environ.get("CONCIERGE_DB") or ROOT / "concierge.db"
     )
+    app.config.setdefault("FRONTEND_DIST", str(ROOT / "frontend" / "dist"))
 
     app.register_blueprint(bp)
     app.teardown_appcontext(database.close_db)
