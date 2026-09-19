@@ -11,7 +11,7 @@ function Desk() {
   const meta = useMeta();
   const [actingAgent, setActingAgent] = useActingAgent(meta);
   const toast = useToast();
-  const { store } = useTickets({ actingAgent, priorities: meta?.priorities ?? [], agentNames: meta?.agents.map((a) => a.name) ?? [], transitions: meta?.transitions ?? null, toast });
+  const { store, changeState, assignTicket } = useTickets({ actingAgent, priorities: meta?.priorities ?? [], agentNames: meta?.agents.map((a) => a.name) ?? [], transitions: meta?.transitions ?? null, toast });
   const [filter, setFilter] = useState<QueueFilter>("all");
   const [search, setSearch] = useState("");
   const [selectedId, setSelectedId] = useState<number | null>(null);
@@ -21,7 +21,7 @@ function Desk() {
       <main className="wrap">
         <div className="columns">
           {meta && store.loaded && (
-            <Queue store={store} meta={meta} filter={filter} search={search} onFilter={setFilter} onSearch={setSearch} selectedId={selectedId} onSelect={setSelectedId} onOpen={() => undefined} onTake={() => undefined} onQuickState={() => undefined} />
+            <Queue store={store} meta={meta} filter={filter} search={search} onFilter={setFilter} onSearch={setSearch} selectedId={selectedId} onSelect={setSelectedId} onOpen={() => undefined} onTake={(id) => void assignTicket(id, actingAgent)} onQuickState={(id, next) => void changeState(id, next)} />
           )}
         </div>
       </main>
