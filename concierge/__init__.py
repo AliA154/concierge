@@ -26,11 +26,7 @@ def create_app(db_path: str | None = None, testing: bool = False) -> Flask:
     from .routes import bp, error
     from .seed import seed_db
 
-    app = Flask(
-        __name__,
-        template_folder=str(ROOT / "templates"),
-        static_folder=str(ROOT / "static"),
-    )
+    app = Flask(__name__, static_folder=None)
     app.config["TESTING"] = testing
     app.config["DATABASE"] = str(
         db_path or os.environ.get("CONCIERGE_DB") or ROOT / "concierge.db"
