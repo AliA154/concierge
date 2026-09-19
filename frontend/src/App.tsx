@@ -18,6 +18,7 @@ import { TopBar } from "./components/TopBar";
 import { TicketForm } from "./components/TicketForm";
 import { Drawer } from "./components/Drawer";
 import type { Store } from "./lib/store";
+import { scrollToRow } from "./lib/scroll";
 import type { State } from "./api/types";
 
 const SHAKE_MS = 150;
@@ -41,6 +42,12 @@ function Desk() {
   const subjectRef = useRef<HTMLInputElement>(null);
   const openDrawer = (id: number) => setDrawerId(id);
   const reduced = useReducedMotion();
+  const scrollToRowInView = (id: number, block: ScrollLogicalPosition) => scrollToRow(id, block, reduced);
+  const openVipTicket = (id: number) => {
+    scrollToRowInView(id, "center");
+    setSelectedId(id);
+    setDrawerId(id);
+  };
   const { collapsingId, resolveFromRow } = useResolveCollapse({ reduced, changeState });
   useShimmer(store.loaded);
 
@@ -77,7 +84,7 @@ function Desk() {
       )}
       <TopBar meta={meta} offline={store.offline} actingAgent={actingAgent} onAgentChange={setActingAgent} />
       <main className="wrap">
-        <VipBanner store={store} onOpen={openDrawer} />
+        <VipBanner store={store} onOpen={openVipTicket} />
         {store.loaded && store.metrics ? <MetricsTiles metrics={store.metrics} /> : <MetricsSkeleton />}
         <div className="columns">
           {meta && <TicketForm meta={meta} onCreate={createTicket} subjectRef={subjectRef} />}

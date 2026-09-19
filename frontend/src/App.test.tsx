@@ -3,6 +3,7 @@ import userEvent from "@testing-library/user-event";
 import { http, HttpResponse } from "msw";
 import { App } from "./App";
 import { queueFixture, server } from "./test/handlers";
+import { makeTicket, metrics, NOW_ISO } from "./test/fixtures";
 
 const rowById = (id: string) => screen.getAllByTestId("queue-row").find((r) => r.dataset["id"] === id)!;
 
@@ -38,6 +39,24 @@ test("j moves the selection down the visible queue and k moves it back", async (
   expect(rowById("1")).toHaveClass("selected");
   await userEvent.keyboard("k");
   expect(rowById("2")).toHaveClass("selected");
+});
+
+test("clicking the VIP banner scrolls to the row, selects it, and opens the drawer", async () => {
+  const breachedVip = makeTicket({
+    id: 2, number: "INC-1002", subject: "CEO laptop", requester: "Sam V", is_vip: true,
+    priority: "High", sla_target_min: 5, created_at: "2026-09-18T11:00:00+00:00",
+  });
+  server.use(http.get("/api/tickets", () => HttpResponse.json({ now: NOW_ISO, queue: [breachedVip], resolved: [], metrics })));
+  const scrollSpy = vi.fn();
+  HTMLElement.prototype.scrollIntoView = scrollSpy;
+  render(<App />);
+  await screen.findByText("CEO laptop");
+
+  await userEvent.click(screen.getByRole("button", { name: /INC-1002/ }));
+
+  expect(scrollSpy).toHaveBeenCalledWith(expect.objectContaining({ block: "center" }));
+  const drawer = await screen.findByRole("dialog", { name: "Ticket detail" });
+  expect(within(drawer).getByText("INC-1002")).toBeInTheDocument();
 });
 
 test("Enter opens the drawer for the selected ticket", async () => {
