@@ -33,23 +33,33 @@ test("a failed poll keeps data and flags offline; next success clears it", async
 
 test("changeState applies optimistically then reconciles with the server ticket", async () => {
   let current: Ticket[] = queueFixture;
+  let mutated = false;
+  let getCalls = 0;
   server.use(
     http.patch("/api/tickets/1", async ({ request }) => {
       const body = (await request.json()) as { state: string };
       const updated = { ...queueFixture[1]!, state: body.state, assigned_to: "Priya Natarajan" } as Ticket;
       current = current.map((t) => (t.id === 1 ? updated : t));
+      mutated = true;
       return HttpResponse.json(updated);
     }),
-    // The post-mutation refresh() call re-fetches the list; return the mutated
-    // ticket here too so it matches what the backend would report after the
-    // PATCH has committed (in tests the fixture is otherwise static).
-    http.get("/api/tickets", () => HttpResponse.json({ now: NOW_ISO, queue: current, resolved: resolvedFixture, metrics })),
+    // metrics.open only flips to 99 once the PATCH has run, so a passing
+    // assertion on it (and on the call count) proves changeState's
+    // post-mutation refresh() actually fired a second GET, not just that
+    // reconcile applied the PATCH response synchronously.
+    http.get("/api/tickets", () => {
+      getCalls += 1;
+      return HttpResponse.json({ now: NOW_ISO, queue: current, resolved: resolvedFixture, metrics: { ...metrics, open: mutated ? 99 : metrics.open } });
+    }),
   );
   const { result } = renderHook(() => useTickets(opts));
   await waitFor(() => expect(result.current.store.loaded).toBe(true));
+  const callsBeforeMutation = getCalls;
   await act(() => result.current.changeState(1, "In Progress"));
   expect(result.current.store.tickets.get(1)?.state).toBe("In Progress");
   expect(result.current.store.tickets.get(1)?.assigned_to).toBe("Priya Natarajan");
+  await waitFor(() => expect(getCalls).toBeGreaterThan(callsBeforeMutation));
+  await waitFor(() => expect(result.current.store.metrics?.open).toBe(99));
 });
 
 test("changeState reverts and toasts on a server error", async () => {
@@ -74,20 +84,30 @@ test("illegal transitions send nothing", async () => {
 
 test("createTicket inserts in sort position and resetDemo returns the message", async () => {
   let current: Ticket[] = queueFixture;
+  let mutated = false;
+  let getCalls = 0;
   server.use(
     http.post("/api/tickets", () => {
       const created = makeTicket({ id: 9, number: "INC-1009", is_vip: true, priority: "Critical" });
       current = [created, ...current];
+      mutated = true;
       return HttpResponse.json(created, { status: 201 });
     }),
-    // Same rationale as above: the post-mutation refresh() must see the
-    // created ticket, so the GET handler here reflects the mutation.
-    http.get("/api/tickets", () => HttpResponse.json({ now: NOW_ISO, queue: current, resolved: resolvedFixture, metrics })),
+    // Same rationale as above: metrics.open only flips to 99 once the POST has
+    // run, so a passing assertion on it (and on the call count) proves
+    // createTicket's post-mutation refresh() fired a second GET.
+    http.get("/api/tickets", () => {
+      getCalls += 1;
+      return HttpResponse.json({ now: NOW_ISO, queue: current, resolved: resolvedFixture, metrics: { ...metrics, open: mutated ? 99 : metrics.open } });
+    }),
     http.post("/api/demo/reset", () => HttpResponse.json({ ok: true, message: "Demo data reset" })),
   );
   const { result } = renderHook(() => useTickets(opts));
   await waitFor(() => expect(result.current.store.loaded).toBe(true));
+  const callsBeforeMutation = getCalls;
   await act(async () => { await result.current.createTicket({ subject: "x", requester: "y", ticket_type: "Incident", impact: "High", urgency: "High", is_vip: true }); });
   expect(result.current.store.queueIds[0]).toBe(9);
+  await waitFor(() => expect(getCalls).toBeGreaterThan(callsBeforeMutation));
+  await waitFor(() => expect(result.current.store.metrics?.open).toBe(99));
   await expect(act(() => result.current.resetDemo())).resolves.toBe("Demo data reset");
 });
