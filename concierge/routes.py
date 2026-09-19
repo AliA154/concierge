@@ -4,9 +4,10 @@ from __future__ import annotations
 
 import sqlite3
 import time
+from pathlib import Path
 from typing import Any
 
-from flask import Blueprint, Response, current_app, jsonify, render_template, request, url_for
+from flask import Blueprint, Response, current_app, jsonify, request, send_from_directory, url_for
 
 from .db import get_db
 from .seed import seed_db
@@ -97,8 +98,22 @@ def clean_text(value: Any, field: str, max_len: int) -> tuple[str | None, str | 
 
 
 @bp.get("/")
-def index() -> str:
-    return render_template("index.html")
+def index() -> Response | tuple[str, int]:
+    dist = Path(current_app.config["FRONTEND_DIST"])
+    index_file = dist / "index.html"
+    if not index_file.is_file():
+        return (
+            "Frontend not built. Run `npm --prefix frontend ci` then `npm run build`.",
+            503,
+        )
+    return send_from_directory(dist, "index.html", max_age=0)
+
+
+@bp.get("/assets/<path:filename>")
+def frontend_asset(filename: str) -> Response:
+    # Vite hashes every asset filename, so a year-long cache is safe.
+    dist = Path(current_app.config["FRONTEND_DIST"])
+    return send_from_directory(dist / "assets", filename, max_age=60 * 60 * 24 * 365)
 
 
 @bp.get("/api/meta")

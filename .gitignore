@@ -4,3 +4,6 @@ concierge.db
 venv/
 .venv/
 .DS_Store
+frontend/node_modules/
+frontend/dist/
+frontend/coverage/

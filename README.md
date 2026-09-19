@@ -2,6 +2,8 @@
 
 [![CI](https://github.com/AliA154/concierge/actions/workflows/ci.yml/badge.svg)](https://github.com/AliA154/concierge/actions/workflows/ci.yml)
 
+Flask + SQLite API, React 18 + TypeScript frontend built with Vite, tested with Vitest and React Testing Library.
+
 **Live demo: https://concierge-y6ju.onrender.com**
 *(free tier — the first load after idle can take up to a minute to wake up)*
 
@@ -87,10 +89,10 @@ app.py                  thin shim: gunicorn app:app
 concierge/__init__.py   app factory (create_app)
 concierge/sla.py        pure domain logic: matrix, SLA math, serialize, metrics
 concierge/db.py         SQLite connection + schema
-concierge/routes.py     all endpoints (one blueprint)
+concierge/routes.py     all endpoints (one blueprint); also serves frontend/dist
 concierge/seed.py       curated deterministic demo data
 tests/                  pytest suite over the SLA math, queue, API, and seed
-templates/, static/     vanilla HTML/CSS/JS frontend (no build step, no deps)
+frontend/               React 18 + TypeScript app (Vite, Vitest, React Testing Library)
 render.yaml             Render deploy config
 ```
 
@@ -99,6 +101,7 @@ render.yaml             Render deploy config
 ```bash
 python3 -m venv .venv && source .venv/bin/activate
 pip install -r requirements.txt
+cd frontend && npm ci && npm run build && cd ..
 python app.py        # http://127.0.0.1:5001 — seeds demo data automatically
 ```
 
@@ -107,4 +110,12 @@ Run the tests:
 ```bash
 pip install -r requirements-dev.txt
 pytest
+cd frontend && npm test
 ```
+
+## Development
+
+Backend: `python app.py` (port 5001)
+Frontend: `cd frontend && npm ci && npm run dev` (port 5173, proxies /api)
+Tests: `pytest -q` and `cd frontend && npm test`
+Build for Flask to serve: `cd frontend && npm run build`

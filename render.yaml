@@ -3,5 +3,8 @@ services:
     name: concierge
     runtime: python
     plan: free
-    buildCommand: pip install -r requirements.txt
+    buildCommand: pip install -r requirements.txt && npm --prefix frontend ci --include=dev && npm --prefix frontend run build
     startCommand: gunicorn app:app --bind 0.0.0.0:$PORT
+    envVars:
+      - key: NODE_VERSION
+        value: "22"
