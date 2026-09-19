@@ -13,7 +13,7 @@ interface Props {
   store: Store; meta: Meta; filter: QueueFilter; search: string;
   onFilter: (f: QueueFilter) => void; onSearch: (q: string) => void;
   selectedId: number | null; onSelect: (id: number) => void; onOpen: (id: number) => void;
-  onTake: (id: number) => void; onQuickState: (id: number, next: State) => void;
+  onTake: (id: number) => void; onQuickState: (id: number, next: State) => void; shakeId: number | null;
 }
 
 const matches = (t: Ticket, q: string) =>
@@ -44,7 +44,7 @@ export function filterCounts(store: Store, nowMs: number): FilterCounts {
   };
 }
 
-export function Queue({ store, meta, filter, search, onFilter, onSearch, selectedId, onSelect, onOpen, onTake, onQuickState }: Props) {
+export function Queue({ store, meta, filter, search, onFilter, onSearch, selectedId, onSelect, onOpen, onTake, onQuickState, shakeId }: Props) {
   const nowMs = useNow();
   const ids = visibleQueueIds(store, filter, search, nowMs);
   const q = search.trim().toLowerCase();
@@ -53,7 +53,7 @@ export function Queue({ store, meta, filter, search, onFilter, onSearch, selecte
     <section className="panel queue-panel">
       <QueueToolbar filter={filter} counts={filterCounts(store, nowMs)} search={search} onFilter={onFilter} onSearch={onSearch} />
       <div className="queue" data-testid="queue">
-        {ids.map((id) => { const t = store.tickets.get(id); return t ? <QueueRow key={id} ticket={t} meta={meta} selected={selectedId === id} onSelect={onSelect} onOpen={onOpen} onTake={onTake} onQuickState={onQuickState} /> : null; })}
+        {ids.map((id) => { const t = store.tickets.get(id); return t ? <QueueRow key={id} ticket={t} meta={meta} selected={selectedId === id} shake={shakeId === id} onSelect={onSelect} onOpen={onOpen} onTake={onTake} onQuickState={onQuickState} /> : null; })}
       </div>
       {store.queueIds.length === 0 && <QueueClear />}
       {store.queueIds.length > 0 && ids.length === 0 && <NoMatch />}

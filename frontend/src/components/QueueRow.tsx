@@ -8,7 +8,7 @@ import { Avatar, agentByName } from "./Avatar";
 import { SlaInstrument, slaRowClass } from "./SlaInstrument";
 
 interface Props {
-  ticket: Ticket; meta: Meta; selected: boolean;
+  ticket: Ticket; meta: Meta; selected: boolean; shake: boolean;
   onSelect: (id: number) => void; onOpen: (id: number) => void;
   onTake: (id: number) => void; onQuickState: (id: number, next: State) => void;
 }
@@ -18,19 +18,19 @@ function Age({ iso }: { iso: string }) {
   return <span className="cell age num">{fmtAge(iso, nowMs)}</span>;
 }
 
-function RowClass({ ticket, children, selected }: { ticket: Ticket; selected: boolean; children: ReactNode }) {
+function RowClass({ ticket, children, selected, shake }: { ticket: Ticket; selected: boolean; shake: boolean; children: ReactNode }) {
   const nowMs = useNow();
-  const cls = ["row", ticket.is_vip ? "is-vip" : "", !ticket.is_vip && ticket.priority === "Critical" ? "is-crit" : "", selected ? "selected" : "", slaRowClass(ticket, nowMs)].filter(Boolean).join(" ");
+  const cls = ["row", ticket.is_vip ? "is-vip" : "", !ticket.is_vip && ticket.priority === "Critical" ? "is-crit" : "", selected ? "selected" : "", shake ? "shake" : "", slaRowClass(ticket, nowMs)].filter(Boolean).join(" ");
   return <div className={cls} data-id={ticket.id} data-testid="queue-row">{children}</div>;
 }
 
-export const QueueRow = memo(function QueueRow({ ticket: t, meta, selected, onSelect, onOpen, onTake, onQuickState }: Props) {
+export const QueueRow = memo(function QueueRow({ ticket: t, meta, selected, shake, onSelect, onOpen, onTake, onQuickState }: Props) {
   const quick = QUICK_ACTION[t.state];
   const glyphTitle = `${t.priority} — Impact ${t.impact} / Urgency ${t.urgency}`;
   const stop = (e: MouseEvent) => e.stopPropagation();
   return (
     <div onClick={() => { onSelect(t.id); onOpen(t.id); }}>
-      <RowClass ticket={t} selected={selected}>
+      <RowClass ticket={t} selected={selected} shake={shake}>
         <span className="cell number num">{t.number}</span>
         <span className="cell glyph"><i className={`pglyph p-${t.priority.toLowerCase()}`} title={glyphTitle} /></span>
         <span className="cell subject">
