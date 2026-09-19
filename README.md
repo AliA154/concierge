@@ -115,7 +115,7 @@ cd frontend && npm test
 
 ## Development
 
-Backend: `SEED_ON_START=1 python app.py` (port 5001)
-Frontend: `cd frontend && npm install && npm run dev` (port 5173, proxies /api)
+Backend: `python app.py` (port 5001)
+Frontend: `cd frontend && npm ci && npm run dev` (port 5173, proxies /api)
 Tests: `pytest -q` and `cd frontend && npm test`
 Build for Flask to serve: `cd frontend && npm run build`
