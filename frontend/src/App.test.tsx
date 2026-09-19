@@ -68,6 +68,23 @@ test("an illegal transition shakes the row and sends nothing; a legal one calls 
   await waitFor(() => expect(patchCalls).toBe(1));
 });
 
+test("3 collapses the selected row for 200ms before resolving it", async () => {
+  let patchCalls = 0;
+  server.use(http.patch("/api/tickets/1", () => {
+    patchCalls += 1;
+    return HttpResponse.json({ ...queueFixture.find((t) => t.id === 1)!, state: "Resolved" });
+  }));
+  render(<App />);
+  await screen.findByText("CEO laptop");
+  await userEvent.keyboard("j");
+  await userEvent.keyboard("j");
+  expect(rowById("1")).toHaveClass("selected");
+  await userEvent.keyboard("3");
+  expect(rowById("1")).toHaveClass("collapsing");
+  expect(patchCalls).toBe(0);
+  await waitFor(() => expect(patchCalls).toBe(1));
+});
+
 test("Escape closes an open drawer, then clears the selection", async () => {
   render(<App />);
   await screen.findByText("CEO laptop");

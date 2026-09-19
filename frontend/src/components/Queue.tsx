@@ -1,5 +1,8 @@
+import { useRef } from "react";
 import type { Meta, State, Ticket } from "../api/types";
+import { useFlip } from "../hooks/useFlip";
 import { useNow } from "../hooks/useNow";
+import { useReducedMotion } from "../hooks/useReducedMotion";
 import { liveSla } from "../lib/sla";
 import type { Store } from "../lib/store";
 import { QueueClear, NoMatch } from "./EmptyState";
@@ -14,6 +17,7 @@ interface Props {
   onFilter: (f: QueueFilter) => void; onSearch: (q: string) => void;
   selectedId: number | null; onSelect: (id: number) => void; onOpen: (id: number) => void;
   onTake: (id: number) => void; onQuickState: (id: number, next: State) => void; shakeId: number | null;
+  collapsingId: number | null;
 }
 
 const matches = (t: Ticket, q: string) =>
@@ -44,16 +48,19 @@ export function filterCounts(store: Store, nowMs: number): FilterCounts {
   };
 }
 
-export function Queue({ store, meta, filter, search, onFilter, onSearch, selectedId, onSelect, onOpen, onTake, onQuickState, shakeId }: Props) {
+export function Queue({ store, meta, filter, search, onFilter, onSearch, selectedId, onSelect, onOpen, onTake, onQuickState, shakeId, collapsingId }: Props) {
   const nowMs = useNow();
   const ids = visibleQueueIds(store, filter, search, nowMs);
   const q = search.trim().toLowerCase();
   const done = store.resolvedIds.flatMap((id) => { const t = store.tickets.get(id); return t && (!q || matches(t, q)) ? [t] : []; });
+  const listRef = useRef<HTMLDivElement>(null);
+  const reduced = useReducedMotion();
+  useFlip(listRef, [ids.join(","), store.resolvedIds.join(",")], !reduced);
   return (
     <section className="panel queue-panel">
       <QueueToolbar filter={filter} counts={filterCounts(store, nowMs)} search={search} onFilter={onFilter} onSearch={onSearch} />
-      <div className="queue" data-testid="queue">
-        {ids.map((id) => { const t = store.tickets.get(id); return t ? <QueueRow key={id} ticket={t} meta={meta} selected={selectedId === id} shake={shakeId === id} onSelect={onSelect} onOpen={onOpen} onTake={onTake} onQuickState={onQuickState} /> : null; })}
+      <div className="queue" data-testid="queue" ref={listRef}>
+        {ids.map((id) => { const t = store.tickets.get(id); return t ? <QueueRow key={id} ticket={t} meta={meta} selected={selectedId === id} shake={shakeId === id} collapsing={collapsingId === id} onSelect={onSelect} onOpen={onOpen} onTake={onTake} onQuickState={onQuickState} /> : null; })}
       </div>
       {store.queueIds.length === 0 && <QueueClear />}
       {store.queueIds.length > 0 && ids.length === 0 && <NoMatch />}

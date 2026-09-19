@@ -11,7 +11,7 @@ function Harness({ initial = "all" }: { initial?: QueueFilter }) {
   const [filter, setFilter] = useState<QueueFilter>(initial);
   const [search, setSearch] = useState("");
   const store = replaceAll(emptyStore(), { now: NOW_ISO, queue: queueFixture, resolved: resolvedFixture, metrics });
-  return <Queue store={store} meta={meta} filter={filter} search={search} onFilter={setFilter} onSearch={setSearch} selectedId={null} onSelect={vi.fn()} onOpen={vi.fn()} onTake={vi.fn()} onQuickState={vi.fn()} shakeId={null} />;
+  return <Queue store={store} meta={meta} filter={filter} search={search} onFilter={setFilter} onSearch={setSearch} selectedId={null} onSelect={vi.fn()} onOpen={vi.fn()} onTake={vi.fn()} onQuickState={vi.fn()} shakeId={null} collapsingId={null} />;
 }
 
 test("renders open rows in order, VIP star, assignee, and resolved section", () => {
@@ -43,7 +43,7 @@ test("search matches subject, requester, or number and applies to resolved", asy
 test("quick actions call handlers", async () => {
   const onTake = vi.fn(); const onQuickState = vi.fn();
   const store = replaceAll(emptyStore(), { now: NOW_ISO, queue: queueFixture, resolved: [], metrics });
-  renderWithProviders(<Queue store={store} meta={meta} filter="all" search="" onFilter={vi.fn()} onSearch={vi.fn()} selectedId={null} onSelect={vi.fn()} onOpen={vi.fn()} onTake={onTake} onQuickState={onQuickState} shakeId={null} />);
+  renderWithProviders(<Queue store={store} meta={meta} filter="all" search="" onFilter={vi.fn()} onSearch={vi.fn()} selectedId={null} onSelect={vi.fn()} onOpen={vi.fn()} onTake={onTake} onQuickState={onQuickState} shakeId={null} collapsingId={null} />);
   const first = screen.getAllByTestId("queue-row")[0]!;
   await userEvent.click(within(first).getByRole("button", { name: "Take" }));
   expect(onTake).toHaveBeenCalledWith(2);
