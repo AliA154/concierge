@@ -1,8 +1,10 @@
 import { useCallback, type Dispatch, type RefObject, type SetStateAction } from "react";
 import type { Meta, State } from "../api/types";
 import { useNow } from "../hooks/useNow";
+import { useReducedMotion } from "../hooks/useReducedMotion";
 import { useShortcuts } from "../hooks/useShortcuts";
 import type { Store } from "../lib/store";
+import { scrollToRow } from "../lib/scroll";
 import { visibleQueueIds, type QueueFilter } from "./Queue";
 
 interface Props {
@@ -25,6 +27,7 @@ interface Props {
 // nowMs-derived queue order the Queue panel renders.
 export function Shortcuts({ store, meta, filter, search, selectedId, setSelectedId, drawerId, setDrawerId, overlayOpen, setOverlayOpen, subjectRef, changeState, setShakeId }: Props) {
   const nowMs = useNow();
+  const reduced = useReducedMotion();
 
   // Depends on nowMs (ticks every second), so it is rebuilt every second
   // regardless — not worth wrapping in useCallback.
@@ -34,7 +37,10 @@ export function Shortcuts({ store, meta, filter, search, selectedId, setSelected
     const idx = selectedId === null ? -1 : ids.indexOf(selectedId);
     const nextIdx = idx === -1 ? (dir === 1 ? 0 : ids.length - 1) : Math.min(Math.max(idx + dir, 0), ids.length - 1);
     const nextId = ids[nextIdx];
-    if (nextId !== undefined) setSelectedId(nextId);
+    if (nextId !== undefined) {
+      setSelectedId(nextId);
+      scrollToRow(nextId, "nearest", reduced);
+    }
   };
 
   const onOpen = useCallback(() => {

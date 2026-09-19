@@ -32,11 +32,14 @@ test("? opens the shortcuts overlay and Escape closes it", async () => {
 });
 
 test("j moves the selection down the visible queue and k moves it back", async () => {
+  const scrollSpy = vi.fn();
+  HTMLElement.prototype.scrollIntoView = scrollSpy;
   render(<App />);
   await screen.findByText("CEO laptop");
   await userEvent.keyboard("j");
   await userEvent.keyboard("j");
   expect(rowById("1")).toHaveClass("selected");
+  expect(scrollSpy).toHaveBeenCalledWith({ block: "nearest", behavior: expect.any(String) });
   await userEvent.keyboard("k");
   expect(rowById("2")).toHaveClass("selected");
 });
