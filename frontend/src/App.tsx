@@ -10,6 +10,7 @@ import { VipBanner } from "./components/VipBanner";
 import { ToastProvider, useToast } from "./components/Toasts";
 import { TopBar } from "./components/TopBar";
 import { TicketForm } from "./components/TicketForm";
+import { Drawer } from "./components/Drawer";
 import type { Store } from "./lib/store";
 
 function Watch({ store }: { store: Store }) {
@@ -21,12 +22,13 @@ function Desk() {
   const meta = useMeta();
   const [actingAgent, setActingAgent] = useActingAgent(meta);
   const toast = useToast();
-  const { store, changeState, assignTicket, createTicket } = useTickets({ actingAgent, priorities: meta?.priorities ?? [], agentNames: meta?.agents.map((a) => a.name) ?? [], transitions: meta?.transitions ?? null, toast });
+  const { store, changeState, assignTicket, createTicket, reopenTicket } = useTickets({ actingAgent, priorities: meta?.priorities ?? [], agentNames: meta?.agents.map((a) => a.name) ?? [], transitions: meta?.transitions ?? null, toast });
   const [filter, setFilter] = useState<QueueFilter>("all");
   const [search, setSearch] = useState("");
   const [selectedId, setSelectedId] = useState<number | null>(null);
+  const [drawerId, setDrawerId] = useState<number | null>(null);
   const subjectRef = useRef<HTMLInputElement>(null);
-  const openDrawer = () => undefined;
+  const openDrawer = (id: number) => setDrawerId(id);
   return (
     <NowProvider offsetMs={store.clockOffsetMs}>
       <Watch store={store} />
@@ -41,6 +43,7 @@ function Desk() {
           )}
         </div>
       </main>
+      {meta && <Drawer id={drawerId} store={store} meta={meta} actingAgent={actingAgent} onClose={() => setDrawerId(null)} onChangeState={(id, s) => void changeState(id, s)} onAssign={(id, n) => void assignTicket(id, n)} onReopen={(id) => void reopenTicket(id)} />}
     </NowProvider>
   );
 }
