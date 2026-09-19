@@ -25,5 +25,5 @@ test("? opens the shortcuts overlay and Escape closes it", async () => {
   await userEvent.keyboard("?");
   expect(screen.getByRole("dialog", { name: "Keyboard shortcuts" })).toBeVisible();
   await userEvent.keyboard("{Escape}");
-  expect(screen.getByRole("dialog", { name: "Keyboard shortcuts" })).not.toBeVisible();
+  expect(screen.getByRole("dialog", { name: "Keyboard shortcuts", hidden: true })).not.toBeVisible();
 });
