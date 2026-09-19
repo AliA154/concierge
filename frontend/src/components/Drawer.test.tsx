@@ -1,10 +1,12 @@
-import { screen, waitFor, within } from "@testing-library/react";
+import { render, screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
-import { http, HttpResponse } from "msw";
+import { delay, http, HttpResponse } from "msw";
 import { renderWithProviders } from "../test/render";
 import { meta, metrics, NOW_ISO } from "../test/fixtures";
 import { queueFixture, resolvedFixture, server } from "../test/handlers";
 import { emptyStore, replaceAll } from "../lib/store";
+import { NowProvider } from "../hooks/useNow";
+import { ToastProvider } from "./Toasts";
 import { Drawer } from "./Drawer";
 
 const store = replaceAll(emptyStore(), { now: NOW_ISO, queue: queueFixture, resolved: resolvedFixture, metrics });
@@ -30,6 +32,40 @@ test("resolved ticket offers Reopen; closed ticket locks the composer", async ()
   const closedStore = replaceAll(emptyStore(), { now: NOW_ISO, queue: [], resolved: [{ ...resolvedFixture[0]!, state: "Closed" }], metrics });
   renderWithProviders(<Drawer id={4} {...props} store={closedStore} />);
   expect(screen.getAllByLabelText("Work note").at(-1)).toBeDisabled();
+});
+
+test("ignores a stale ticket detail response after switching tickets", async () => {
+  server.use(
+    http.get("/api/tickets/1", async () => {
+      await delay(50);
+      return HttpResponse.json({
+        now: NOW_ISO,
+        ticket: queueFixture[1]!,
+        events: [{ id: 101, actor: "System", event_type: "work_note", detail: "Checked the tunnel", created_at: NOW_ISO }],
+      });
+    }),
+    http.get("/api/tickets/4", () =>
+      HttpResponse.json({
+        now: NOW_ISO,
+        ticket: resolvedFixture[0]!,
+        events: [{ id: 201, actor: "System", event_type: "work_note", detail: "Printer fixed", created_at: NOW_ISO }],
+      }),
+    ),
+  );
+  const tree = (id: number) => (
+    <NowProvider offsetMs={0}>
+      <ToastProvider>
+        <Drawer id={id} {...props} />
+      </ToastProvider>
+    </NowProvider>
+  );
+  const { rerender } = render(tree(1));
+  rerender(tree(4));
+  expect(await screen.findByText("Printer fixed")).toBeInTheDocument();
+  // Give ticket 1's delayed response time to land; it must not overwrite ticket 4's timeline.
+  await new Promise((resolve) => setTimeout(resolve, 80));
+  expect(screen.queryByText("Checked the tunnel")).not.toBeInTheDocument();
+  expect(screen.getByText("Printer fixed")).toBeInTheDocument();
 });
 
 test("note posts optimistically and restores the draft on failure", async () => {
