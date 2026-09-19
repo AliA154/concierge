@@ -1,7 +1,8 @@
 import { act, renderHook, waitFor } from "@testing-library/react";
 import { http, HttpResponse } from "msw";
-import { server, queueFixture } from "../test/handlers";
-import { makeTicket, meta } from "../test/fixtures";
+import { server, queueFixture, resolvedFixture } from "../test/handlers";
+import { makeTicket, meta, metrics, NOW_ISO } from "../test/fixtures";
+import type { Ticket } from "../api/types";
 import { POLL_MS, useTickets } from "./useTickets";
 
 const opts = { actingAgent: "Priya Natarajan", priorities: meta.priorities, agentNames: meta.agents.map((a) => a.name), transitions: meta.transitions, toast: vi.fn() };
@@ -31,10 +32,19 @@ test("a failed poll keeps data and flags offline; next success clears it", async
 });
 
 test("changeState applies optimistically then reconciles with the server ticket", async () => {
-  server.use(http.patch("/api/tickets/1", async ({ request }) => {
-    const body = (await request.json()) as { state: string };
-    return HttpResponse.json({ ...queueFixture[1]!, state: body.state, assigned_to: "Priya Natarajan" });
-  }));
+  let current: Ticket[] = queueFixture;
+  server.use(
+    http.patch("/api/tickets/1", async ({ request }) => {
+      const body = (await request.json()) as { state: string };
+      const updated = { ...queueFixture[1]!, state: body.state, assigned_to: "Priya Natarajan" } as Ticket;
+      current = current.map((t) => (t.id === 1 ? updated : t));
+      return HttpResponse.json(updated);
+    }),
+    // The post-mutation refresh() call re-fetches the list; return the mutated
+    // ticket here too so it matches what the backend would report after the
+    // PATCH has committed (in tests the fixture is otherwise static).
+    http.get("/api/tickets", () => HttpResponse.json({ now: NOW_ISO, queue: current, resolved: resolvedFixture, metrics })),
+  );
   const { result } = renderHook(() => useTickets(opts));
   await waitFor(() => expect(result.current.store.loaded).toBe(true));
   await act(() => result.current.changeState(1, "In Progress"));
@@ -63,8 +73,16 @@ test("illegal transitions send nothing", async () => {
 });
 
 test("createTicket inserts in sort position and resetDemo returns the message", async () => {
+  let current: Ticket[] = queueFixture;
   server.use(
-    http.post("/api/tickets", () => HttpResponse.json(makeTicket({ id: 9, number: "INC-1009", is_vip: true, priority: "Critical" }), { status: 201 })),
+    http.post("/api/tickets", () => {
+      const created = makeTicket({ id: 9, number: "INC-1009", is_vip: true, priority: "Critical" });
+      current = [created, ...current];
+      return HttpResponse.json(created, { status: 201 });
+    }),
+    // Same rationale as above: the post-mutation refresh() must see the
+    // created ticket, so the GET handler here reflects the mutation.
+    http.get("/api/tickets", () => HttpResponse.json({ now: NOW_ISO, queue: current, resolved: resolvedFixture, metrics })),
     http.post("/api/demo/reset", () => HttpResponse.json({ ok: true, message: "Demo data reset" })),
   );
   const { result } = renderHook(() => useTickets(opts));

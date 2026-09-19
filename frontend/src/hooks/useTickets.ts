@@ -55,7 +55,8 @@ export function useTickets(opts: UseTicketsOptions): TicketActions {
 
   const reconcile = useCallback((t: Ticket) => {
     setStore((s) => applyTicket(s, t, optsRef.current.priorities));
-  }, []);
+    void refresh();
+  }, [refresh]);
 
   const reopenTicket = useCallback(async (id: number): Promise<Ticket | null> => {
     try {
